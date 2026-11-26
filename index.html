@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b2a63">
+<title>Fiapé · Consulta antes de confiar</title>
+<meta name="description" content="Fiapé: consulta la reputación de una persona en el Perú antes de confiar. Usuarios verificados con DNI califican de 1 a 10 estrellas.">
+<link rel="icon" href="app/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--b:#0b2a63;--b2:#163f8f;--bl:#e6edfb;--gold:#f5b700;--ink:#0f1830;--mute:#56607a;--line:#dde2ee;--bg:#f3f5fa}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.6 Inter,system-ui,sans-serif}
+h1,h2,h3{font-family:Sora,Inter,sans-serif;letter-spacing:-.02em;line-height:1.15;margin:0;text-wrap:balance}
+a{color:var(--b2)}
+.in{max-width:1040px;margin:0 auto;padding:0 20px}
+header{background:var(--b);color:#fff}
+nav{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0}
+.brand{display:flex;align-items:center;gap:10px;font:800 24px Sora,Inter;color:#fff;text-decoration:none}
+.brand img{width:38px;height:38px;border-radius:10px}
+nav a.enter{color:#fff;font-weight:700;text-decoration:none;border:1.5px solid rgba(255,255,255,.4);border-radius:12px;padding:8px 16px;min-height:44px;display:inline-flex;align-items:center}
+.hero{display:grid;grid-template-columns:1.2fr 1fr;gap:40px;align-items:center;padding:40px 0 70px}
+.hero h1{font-size:clamp(34px,6vw,56px)}
+.hero h1 em{font-style:normal;color:var(--gold)}
+.hero p{font-size:19px;opacity:.92;max-width:34ch;margin:16px 0 0}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:26px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;padding:12px 22px;border-radius:14px;font-weight:700;text-decoration:none}
+.btn.gold{background:var(--gold);color:#2b1f00}.btn.line{border:1.5px solid rgba(255,255,255,.5);color:#fff}
+.btn svg{width:22px;height:22px}
+.demo{background:#fff;color:var(--ink);border-radius:22px;padding:20px;box-shadow:0 24px 60px rgba(0,0,0,.25)}
+.demo small{color:var(--mute)}
+.demo .n{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-top:6px}
+.demo .n b{font:800 44px/1 Sora,Inter}.demo .n b span{font-size:18px;color:var(--mute)}
+.bar{height:10px;border-radius:5px;background:var(--line);margin-top:12px;overflow:hidden}.bar i{display:block;height:100%;width:88%;background:var(--gold)}
+.st{display:flex;gap:4px;margin-top:14px}.st svg{width:22px;height:22px;color:var(--gold)}.st svg.off{color:var(--line)}
+section{padding:56px 0}
+section h2{font-size:clamp(26px,4vw,36px);text-align:center}
+section > .in > p.lead{text-align:center;color:var(--mute);max-width:52ch;margin:10px auto 0}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;margin-top:30px;counter-reset:s}
+.step{background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px}
+.step::before{counter-increment:s;content:counter(s);display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:var(--b);color:#fff;font:800 18px Sora}
+.step h3{margin-top:12px;font-size:19px}.step p{color:var(--mute);margin:6px 0 0;font-size:16px}
+.band{background:var(--bl)}
+.faq{max-width:720px;margin:26px auto 0}
+details{background:#fff;border:1px solid var(--line);border-radius:14px;padding:4px 18px;margin-top:10px}
+summary{cursor:pointer;font-weight:700;min-height:52px;display:flex;align-items:center}
+details p{color:var(--mute);margin:0 0 14px}
+.dl{background:var(--b);color:#fff;text-align:center}
+.dl p{opacity:.9;max-width:46ch;margin:10px auto 0}
+.dl .cta{justify-content:center}
+.inst{max-width:520px;margin:24px auto 0;text-align:left;background:rgba(255,255,255,.08);border-radius:16px;padding:16px 20px 16px 40px;font-size:16px}
+footer{padding:26px 0;color:var(--mute);font-size:14px;text-align:center}
+@media(max-width:760px){.hero{grid-template-columns:1fr;padding-top:20px}.hero p{max-width:none}}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+</style>
+</head>
+<body>
+<header><div class="in">
+  <nav><a class="brand" href="./"><img src="app/icon-192.png" alt="">Fiapé</a><a class="enter" href="app/">Iniciar sesión</a></nav>
+  <div class="hero">
+    <div>
+      <h1>Consulta antes de <em>confiar</em>.</h1>
+      <p>Busca a una persona por su DNI o su nombre y mira cómo la califican otros peruanos verificados, de 1 a 10 estrellas.</p>
+      <div class="cta">
+        <a class="btn gold" href="app/">Entrar a Fiapé</a>
+        <a class="btn line" id="apk" href="https://github.com/NeisserMichel/fiape/raw/apk-build/fiape.apk">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Descargar app Android</a>
+      </div>
+    </div>
+    <div class="demo" aria-hidden="true">
+      <small>Ejemplo de resultado</small>
+      <h3 style="margin-top:4px">MARÍA ELENA TORRES RAMOS</h3>
+      <small>DNI 12345678 · Arequipa · 27 calificaciones</small>
+      <div class="n"><b>8.8<span>/10</span></b><small>Muy recomendable</small></div>
+      <div class="bar"><i></i></div>
+    </div>
+  </div>
+</div></header>
+
+<main>
+  <section><div class="in">
+    <h2>Así funciona</h2>
+    <p class="lead">Solo personas con DNI verificado pueden buscar y calificar. Así cada nota viene de alguien real.</p>
+    <div class="steps">
+      <div class="step"><h3>Regístrate con tu DNI</h3><p>Tus nombres y apellidos exactamente como en tu DNI, y el departamento donde vives.</p></div>
+      <div class="step"><h3>Verifica tu identidad</h3><p>Sube tu DNI por ambos lados y una selfie sosteniéndolo bajo el mentón. Un administrador lo revisa.</p></div>
+      <div class="step"><h3>Busca antes de calificar</h3><p>Busca por DNI o nombre. Si la persona no está, regístrala con su DNI y nombre completo.</p></div>
+      <div class="step"><h3>Califica de 1 a 10</h3><p>1 es nada recomendable y 10 lo recomiendo totalmente. Se publica el promedio, nunca quién calificó.</p></div>
+    </div>
+  </div></section>
+
+  <section class="band"><div class="in">
+    <h2>Top 100 de cada departamento</h2>
+    <p class="lead">En el ranking aparecen las personas más confiables de los 24 departamentos y el Callao, con al menos 5 calificaciones.</p>
+  </div></section>
+
+  <section><div class="in">
+    <h2>Preguntas frecuentes</h2>
+    <div class="faq">
+      <details><summary>¿Es gratis?</summary><p>Sí. Registrarte, verificarte, buscar y calificar no cuesta nada.</p></details>
+      <details><summary>¿Saben quién los calificó?</summary><p>No. Las calificaciones son anónimas: solo se muestra el promedio y la cantidad de calificaciones.</p></details>
+      <details><summary>¿Quién ve las fotos de mi DNI?</summary><p>Solo el equipo de verificación de Fiapé. Se guardan en un almacenamiento privado y nunca se publican.</p></details>
+      <details><summary>¿Puedo cambiar una calificación?</summary><p>Sí. Puedes calificar una sola vez a cada persona, pero puedes cambiar tu nota cuando quieras.</p></details>
+      <details><summary>Alguien me registró antes de que yo tuviera cuenta. ¿Qué pasa?</summary><p>Al registrarte con tu DNI, ese perfil pasa a ser tuyo y conservas todas tus calificaciones.</p></details>
+      <details><summary>¿Por qué rechazaron mi verificación?</summary><p>En la app verás el motivo. Tienes 3 intentos; si se agotan, contacta a soporte.</p></details>
+    </div>
+  </div></section>
+
+  <section class="dl"><div class="in">
+    <h2>Lleva Fiapé en tu celular</h2>
+    <p>Descarga la app para Android o úsala desde el navegador de cualquier celular o computadora.</p>
+    <div class="cta"><a class="btn gold" href="https://github.com/NeisserMichel/fiape/raw/apk-build/fiape.apk">Descargar app Android</a><a class="btn line" href="app/">Usar en el navegador</a></div>
+    <ol class="inst">
+      <li>Toca <b>Descargar app Android</b> y abre el archivo <b>fiape.apk</b>.</li>
+      <li>Si tu celular lo pide, permite <b>instalar apps de esta fuente</b>.</li>
+      <li>Toca <b>Instalar</b> y abre Fiapé.</li>
+    </ol>
+  </div></section>
+</main>
+<footer><div class="in">© Fiapé · Perú</div></footer>
+</body>
+</html>

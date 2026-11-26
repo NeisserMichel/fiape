@@ -1,6 +1,9 @@
 -- =====================================================================
---  FIAPÉ · Esquema inicial de base de datos (Supabase / PostgreSQL)
+--  FIAPÉ · Base de datos (Supabase / PostgreSQL)
 --  Plataforma de reputación: calificación de personas de 1 a 10 estrellas
+--
+--  Pegar TODO este archivo en Supabase > SQL Editor > New query > Run.
+--  Se puede volver a ejecutar: no borra datos.
 -- =====================================================================
 --  Contenido:
 --    1. Extensiones
@@ -31,6 +34,7 @@ create extension if not exists pg_trgm  with schema extensions;
 -- 2. TIPOS
 -- ---------------------------------------------------------------------
 -- Estado de la cuenta del usuario
+do $$ begin
 create type public.estado_verificacion as enum (
   'pendiente_envio',  -- registrado, aún no envía sus fotos
   'en_revision',      -- envió fotos, espera revisión del administrador
@@ -38,9 +42,14 @@ create type public.estado_verificacion as enum (
   'rechazado',        -- rechazado, puede reintentar (si le quedan intentos)
   'bloqueado'         -- agotó sus 3 intentos: debe contactar a soporte
 );
+exception when duplicate_object then null;
+end $$;
 
 -- Estado de cada solicitud de verificación (cada envío de fotos)
-create type public.estado_solicitud as enum ('en_revision', 'aprobada', 'rechazada');
+do $$ begin
+  create type public.estado_solicitud as enum ('en_revision', 'aprobada', 'rechazada');
+exception when duplicate_object then null;
+end $$;
 
 
 -- ---------------------------------------------------------------------
@@ -48,7 +57,7 @@ create type public.estado_solicitud as enum ('en_revision', 'aprobada', 'rechaza
 -- ---------------------------------------------------------------------
 
 -- 3.1 Departamentos del Perú (24 departamentos + Callao)
-create table public.departamentos (
+create table if not exists public.departamentos (
   id     smallint primary key,
   nombre text not null unique
 );
@@ -62,12 +71,13 @@ insert into public.departamentos (id, nombre) values
   (16, 'Loreto'),       (17, 'Madre de Dios'), (18, 'Moquegua'),
   (19, 'Pasco'),        (20, 'Piura'),         (21, 'Puno'),
   (22, 'San Martín'),   (23, 'Tacna'),         (24, 'Tumbes'),
-  (25, 'Ucayali');
+  (25, 'Ucayali')
+on conflict (id) do nothing;
 
 -- 3.2 Personas: la base de datos consultable.
 --     Incluye a todos los usuarios registrados y a las personas que
 --     los usuarios registran para calificarlas.
-create table public.personas (
+create table if not exists public.personas (
   id                    uuid primary key default gen_random_uuid(),
   dni                   text not null unique check (dni ~ '^[0-9]{8}$'),
   nombres               text not null,
@@ -87,16 +97,16 @@ create table public.personas (
   updated_at            timestamptz not null default now()
 );
 
-create index personas_nombre_trgm_idx
+create index if not exists personas_nombre_trgm_idx
   on public.personas using gin (nombre_busqueda extensions.gin_trgm_ops);
-create index personas_ranking_idx
+create index if not exists personas_ranking_idx
   on public.personas (departamento_id, promedio desc, total_calificaciones desc)
   where total_calificaciones >= 5;
 
 -- 3.3 Perfiles: una fila por cada cuenta de usuario.
 --     Guarda los datos tal como el usuario los declaró al registrarse
 --     (se comparan con las fotos del DNI) y su estado de verificación.
-create table public.perfiles (
+create table if not exists public.perfiles (
   id                     uuid primary key references auth.users (id) on delete cascade,
   persona_id             uuid not null unique references public.personas (id),
   nombres                text not null,
@@ -111,7 +121,7 @@ create table public.perfiles (
 );
 
 -- 3.4 Verificaciones: cada envío de las 3 fotos
-create table public.verificaciones (
+create table if not exists public.verificaciones (
   id                uuid primary key default gen_random_uuid(),
   user_id           uuid not null references public.perfiles (id) on delete cascade,
   intento           smallint not null check (intento between 1 and 10),
@@ -126,12 +136,12 @@ create table public.verificaciones (
 );
 
 -- Solo una solicitud en revisión a la vez por usuario
-create unique index verificaciones_una_en_revision_idx
+create unique index if not exists verificaciones_una_en_revision_idx
   on public.verificaciones (user_id) where estado = 'en_revision';
-create index verificaciones_estado_idx on public.verificaciones (estado, created_at);
+create index if not exists verificaciones_estado_idx on public.verificaciones (estado, created_at);
 
 -- 3.5 Calificaciones: una por usuario y persona (editable)
-create table public.calificaciones (
+create table if not exists public.calificaciones (
   id          uuid primary key default gen_random_uuid(),
   persona_id  uuid not null references public.personas (id) on delete cascade,
   autor_id    uuid not null references auth.users (id) on delete cascade,
@@ -141,12 +151,12 @@ create table public.calificaciones (
   unique (persona_id, autor_id)
 );
 
-create index calificaciones_autor_idx on public.calificaciones (autor_id);
+create index if not exists calificaciones_autor_idx on public.calificaciones (autor_id);
 
 -- 3.6 Búsquedas: registro de búsquedas.
 --     Sirve para exigir que el usuario busque ANTES de registrar o
 --     calificar a una persona.
-create table public.busquedas (
+create table if not exists public.busquedas (
   id          bigint generated always as identity primary key,
   user_id     uuid not null references auth.users (id) on delete cascade,
   consulta    text not null,
@@ -156,7 +166,7 @@ create table public.busquedas (
   created_at  timestamptz not null default now()
 );
 
-create index busquedas_usuario_idx on public.busquedas (user_id, created_at desc);
+create index if not exists busquedas_usuario_idx on public.busquedas (user_id, created_at desc);
 
 
 -- ---------------------------------------------------------------------
@@ -231,6 +241,7 @@ begin
 end;
 $$;
 
+drop trigger if exists personas_normalizar on public.personas;
 create trigger personas_normalizar
   before insert or update of nombres, apellido_paterno, apellido_materno on public.personas
   for each row execute function public.tg_personas_normalizar();
@@ -272,6 +283,7 @@ begin
 end;
 $$;
 
+drop trigger if exists calificaciones_recalcular on public.calificaciones;
 create trigger calificaciones_recalcular
   after insert or update or delete on public.calificaciones
   for each row execute function public.tg_recalcular_promedio();
@@ -288,6 +300,7 @@ begin
 end;
 $$;
 
+drop trigger if exists perfiles_updated_at on public.perfiles;
 create trigger perfiles_updated_at
   before update on public.perfiles
   for each row execute function public.tg_updated_at();
@@ -407,6 +420,7 @@ begin
 end;
 $$;
 
+drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.tg_nuevo_usuario();
@@ -880,6 +894,7 @@ values ('verificaciones', 'verificaciones', false, 5242880,
 on conflict (id) do nothing;
 
 -- Cada usuario sube fotos solo a su carpeta: <user_id>/...
+drop policy if exists "verificaciones: subir en carpeta propia" on storage.objects;
 create policy "verificaciones: subir en carpeta propia"
   on storage.objects for insert to authenticated
   with check (
@@ -889,6 +904,7 @@ create policy "verificaciones: subir en carpeta propia"
 
 -- Cada usuario ve solo sus fotos; los administradores ven todas.
 -- Nadie más puede verlas.
+drop policy if exists "verificaciones: ver propias o admin" on storage.objects;
 create policy "verificaciones: ver propias o admin"
   on storage.objects for select to authenticated
   using (
@@ -908,22 +924,27 @@ alter table public.calificaciones enable row level security;
 alter table public.busquedas      enable row level security;
 
 -- Lectura directa permitida (todo lo demás pasa por las funciones RPC)
+drop policy if exists "departamentos: lectura pública" on public.departamentos;
 create policy "departamentos: lectura pública"
   on public.departamentos for select to anon, authenticated using (true);
 
+drop policy if exists "perfiles: ver el propio o admin" on public.perfiles;
 create policy "perfiles: ver el propio o admin"
   on public.perfiles for select to authenticated
   using (id = auth.uid() or public.es_admin());
 
+drop policy if exists "personas: solo admin" on public.personas;
 create policy "personas: solo admin"
   on public.personas for select to authenticated
   using (public.es_admin());
 
+drop policy if exists "verificaciones: ver las propias o admin" on public.verificaciones;
 create policy "verificaciones: ver las propias o admin"
   on public.verificaciones for select to authenticated
   using (user_id = auth.uid() or public.es_admin());
 
 -- Las calificaciones son anónimas: cada uno ve solo las suyas
+drop policy if exists "calificaciones: ver las propias o admin" on public.calificaciones;
 create policy "calificaciones: ver las propias o admin"
   on public.calificaciones for select to authenticated
   using (autor_id = auth.uid() or public.es_admin());

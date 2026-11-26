@@ -1,134 +1,72 @@
-# Fiapé · Base de datos (Supabase)
+# Fiapé
 
-Plataforma de reputación para Perú: los usuarios verificados califican a personas de **1 a 10 estrellas**, se muestra el **promedio** y un **Top 100 por departamento**.
+Plataforma de reputación para Perú: los usuarios **verificados con su DNI** califican a personas de **1 a 10 estrellas** (1 = nada recomendable, 10 = lo recomiendo totalmente). Se muestra públicamente el **promedio** de cada persona y un **Top 100 de las personas más confiables por departamento**.
 
-```
-fiape/
-├── supabase/migrations/20261126000000_esquema_inicial.sql   ← la base de datos completa
-└── test/                                                    ← pruebas automáticas (opcional)
-```
-
----
-
-## Paso 1 · Crear el repositorio en GitHub
-
-1. Entra a <https://github.com/new>.
-2. Nombre: `fiape` · Visibilidad: **Private** · Crear.
-3. Sube esta carpeta (desde tu computadora, dentro de `fiape/`):
-   ```bash
-   git init
-   git add .
-   git commit -m "Base de datos inicial de Fiapé"
-   git branch -M main
-   git remote add origin https://github.com/TU_USUARIO/fiape.git
-   git push -u origin main
-   ```
-
-## Paso 2 · Crear el proyecto en Supabase
-
-1. Entra a <https://supabase.com/dashboard> → **New project**.
-2. Nombre: `fiape` · Región: **South America (São Paulo)** (la más cercana a Perú).
-3. Guarda bien la contraseña de la base de datos.
-
-## Paso 3 · Ejecutar la base de datos
-
-**Opción fácil (recomendada):**
-1. En Supabase abre **SQL Editor** → **New query**.
-2. Copia todo el contenido de `supabase/migrations/20261126000000_esquema_inicial.sql`, pégalo y pulsa **Run**.
-3. Debe decir *Success*. En **Table Editor** verás: `departamentos`, `personas`, `perfiles`, `verificaciones`, `calificaciones`, `busquedas`. En **Storage** verás el bucket privado `verificaciones`.
-
-**Opción con la CLI de Supabase** (si prefieres automatizar):
-```bash
-npx supabase login
-npx supabase link --project-ref TU_PROJECT_REF
-npx supabase db push
-```
-
-## Paso 4 · Configurar el registro (Authentication)
-
-En **Authentication → Providers → Email**:
-- Activado: **Email**.
-- Activado: **Confirm email** (recomendado, evita cuentas falsas).
-
-> ⚠️ No crees usuarios con el botón "Add user" del panel de Supabase: ese formulario no envía DNI ni nombres y el registro será rechazado. Todos los usuarios se registran desde la web/app.
-
-## Paso 5 · Nombrar al primer administrador
-
-Cuando la web esté lista, regístrate normalmente con tu DNI. Luego, en **SQL Editor**, ejecuta (cambia el correo):
-
-```sql
-update public.perfiles
-   set es_admin = true, estado = 'verificado'
- where id = (select id from auth.users where email = 'tu-correo@ejemplo.com');
-```
-
-Desde ahí, ese administrador aprueba o rechaza las verificaciones de los demás (un admin no puede aprobarse a sí mismo).
-
----
-
-## Cómo funciona
-
-| Regla del negocio | Cómo se cumple en la base de datos |
+| Carpeta / archivo | Qué es |
 |---|---|
-| Registro con DNI, nombres, apellidos y departamento obligatorios | El registro se rechaza si falta alguno o el DNI no tiene 8 dígitos |
-| Todo usuario entra a la base consultable | Al registrarse se crea su ficha en `personas` |
-| Si alguien ya registró ese DNI, la nueva cuenta lo reclama | Se une a la ficha existente y **conserva sus calificaciones** |
-| Un DNI no puede tener dos cuentas | Error `DNI_YA_REGISTRADO` |
-| Sin verificar no puede buscar ni registrar ni calificar | Error `CUENTA_NO_VERIFICADA` |
-| 3 fotos: DNI anverso, reverso y selfie con el DNI | Se guardan en un bucket **privado**; solo el dueño y los admins las ven |
-| Máximo 3 intentos de verificación | Al 3.er rechazo queda `bloqueado`; soporte puede dar un intento extra |
-| Búsqueda obligatoria antes de registrar | Solo se registra un DNI si el usuario lo buscó en los últimos 30 min y no existía |
-| Búsqueda obligatoria antes de calificar | Solo se califica a quien apareció en una búsqueda del usuario (últimas 2 h) |
-| 1 a 10 estrellas, una por persona, editable | Calificar de nuevo reemplaza la anterior |
-| Calificaciones anónimas, promedio público | Nadie ve quién calificó; el promedio se recalcula solo |
-| No calificarse a uno mismo | Error `NO_PUEDES_CALIFICARTE` |
-| Top 100 por departamento (mín. 5 calificaciones) | Función `ranking_departamento` (no muestra DNI) |
-| Anti-spam | Máximo 20 personas registradas por usuario al día |
-
-### Funciones para la web/app (`supabase.rpc(...)`)
-
-| Función | Quién | Para qué |
-|---|---|---|
-| `dni_tiene_cuenta(p_dni)` | Cualquiera | Avisar en el formulario de registro si el DNI ya tiene cuenta |
-| `mi_perfil()` | Usuario | Datos, estado de verificación, intentos restantes, motivo del último rechazo y su promedio |
-| `enviar_verificacion(anverso, reverso, selfie)` | Usuario | Enviar las 3 fotos (antes se suben a `verificaciones/<user_id>/...`) |
-| `buscar_personas(p_consulta)` | Verificado | Por DNI (8 dígitos) o por nombre (sin importar tildes); máx. 20 resultados |
-| `registrar_persona(dni, nombres, ap_paterno, ap_materno, departamento_id)` | Verificado | Registrar a alguien que no apareció en la búsqueda |
-| `calificar(persona_id, estrellas)` | Verificado | Calificar o cambiar la calificación; devuelve el nuevo promedio |
-| `ranking_departamento(departamento_id)` | Usuario | Top 100 del departamento |
-| `admin_listar_verificaciones(estado)` | Admin | Solicitudes pendientes con datos declarados y rutas de fotos |
-| `admin_revisar_verificacion(id, aprobar, motivo)` | Admin | Aprobar o rechazar (rechazo exige motivo) |
-| `admin_habilitar_reintento(user_id)` | Admin | Dar un intento extra a un usuario bloqueado |
-
-Ejemplo de registro desde la web:
-```js
-await supabase.auth.signUp({
-  email, password,
-  options: { data: {
-    dni: '12345678', nombres: 'Juan Carlos',
-    apellido_paterno: 'Pérez', apellido_materno: 'Soto',
-    departamento_id: 15   // Lima
-  }}
-})
-```
-
-### Códigos de error (para traducir a mensajes en la web/app)
-
-`DNI_INVALIDO` · `NOMBRES_INVALIDOS` · `APELLIDO_PATERNO_INVALIDO` · `APELLIDO_MATERNO_INVALIDO` · `DEPARTAMENTO_OBLIGATORIO` · `DEPARTAMENTO_INVALIDO` · `DNI_YA_REGISTRADO` · `NO_AUTENTICADO` · `CUENTA_NO_VERIFICADA` · `YA_VERIFICADO` · `VERIFICACION_EN_REVISION` · `LIMITE_INTENTOS_ALCANZADO` · `FOTOS_DEBEN_SER_DISTINTAS` · `RUTA_FOTO_INVALIDA` · `FOTO_NO_ENCONTRADA` · `CONSULTA_MUY_CORTA` · `PERSONA_YA_EXISTE` · `BUSQUEDA_PREVIA_REQUERIDA` · `LIMITE_REGISTROS_DIARIO` · `ESTRELLAS_FUERA_DE_RANGO` · `PERSONA_NO_EXISTE` · `NO_PUEDES_CALIFICARTE` · `SOLO_ADMIN` · `VERIFICACION_NO_EXISTE` · `VERIFICACION_YA_REVISADA` · `NO_PUEDES_REVISARTE` · `MOTIVO_REQUERIDO` · `USUARIO_NO_BLOQUEADO`
+| `index.html` | Página web pública (cómo funciona, ranking, preguntas y descarga del APK) |
+| `app/` | La app para usuarios y administradores. Se instala en el celular (PWA) |
+| `app/config.js` | **Tus datos de Supabase** (URL y clave pública) — ya configurado |
+| `supabase/schema.sql` | La base de datos completa: tablas, reglas, seguridad y fotos privadas del DNI |
+| `supabase/tests/` | Pruebas automáticas de la base de datos (57 comprobaciones) |
+| `android/` | App Android (abre la app web y permite subir las fotos del DNI) |
+| `.github/workflows/` | GitHub corre las pruebas y compila el APK solo |
+| `tests/` | Servidor y prueba de navegador usados en desarrollo (42 comprobaciones; no se usan en producción) |
 
 ---
 
-## Pruebas (opcional, para desarrolladores)
+## Lo que debes hacer tú
 
-`test/` contiene una simulación de Supabase y 57 comprobaciones del flujo completo (registro, verificación, bloqueo, búsqueda, calificación, ranking, reclamo de perfil y seguridad). Con PostgreSQL 15+ instalado:
+### 1. Supabase ✅ (ya hecho)
+- Proyecto `fiape` en São Paulo, `supabase/schema.sql` ejecutado y Site URL / Redirect URLs = `https://neissermichel.github.io/fiape/app/`.
+- Revisa en **Authentication → Sign In / Providers → Email** que **Confirm email** esté activado.
+- Antes de abrir al público configura un SMTP propio en **Authentication → Emails → SMTP Settings** (Brevo o Resend tienen planes gratis): el correo gratuito de Supabase solo envía unos pocos correos por hora.
+- No crees usuarios con el botón **Add user** del panel: ese formulario no envía DNI ni nombres y el registro será rechazado.
 
-```bash
-createdb fiape_test
-psql -d fiape_test -f test/supabase_stub.sql
-psql -d fiape_test -f supabase/migrations/20261126000000_esquema_inicial.sql
-psql -d fiape_test -f test/pruebas.sql      # termina con "TODAS LAS PRUEBAS PASARON"
-```
+### 2. Publicar la web y la app (GitHub Pages)
+1. El repositorio debe ser **público** para usar GitHub Pages gratis. Es seguro: el código no tiene claves secretas; toda la protección de los datos está en Supabase.
+   **Settings → General →** (abajo) **Danger Zone → Change visibility → Make public**.
+2. **Settings → Pages → Source: Deploy from a branch → main / (root)** → Save.
+3. En 1–2 minutos queda en `https://neissermichel.github.io/fiape/` y la app en `/app/`.
 
-## Pendiente antes del lanzamiento
+### 3. App Android (APK)
+1. Guarda la llave de firma como secretos del repo (te la entregué en un archivo aparte, **nunca la subas al repositorio**):
+   **Settings → Secrets and variables → Actions → New repository secret**, con los nombres `ANDROID_KEYSTORE_PASS` y `ANDROID_KEYSTORE_B64`.
+2. **Actions → Compilar APK → Run workflow**.
+3. Al terminar, el APK queda en la rama `apk-build` (`fiape.apk`) y el botón **Descargar app Android** de la web ya funciona.
+4. **Actualización obligatoria:** cada vez que se compila un APK nuevo, GitHub actualiza `app/version.json` y las apps instaladas más antiguas muestran una pantalla que obliga a descargar la nueva versión. Los cambios de la web y de la app (pantallas, reglas) llegan solos, sin reinstalar.
 
-- El DNI completo es visible en las búsquedas y no hay términos de uso, formulario de eliminación ni reportes. Bajo la **Ley 29733** esto es un riesgo legal; conviene revisarlo con un abogado antes de lanzar.
+### 4. Convertirte en administrador
+1. Abre la app y **regístrate** con tu DNI, como cualquier usuario, y confirma tu correo.
+2. En Supabase → SQL Editor, ejecuta (con tu correo):
+   ```sql
+   update public.perfiles set es_admin = true, estado = 'verificado'
+    where id = (select id from auth.users where email = 'tucorreo@gmail.com');
+   ```
+3. Cierra sesión y vuelve a entrar. Verás la pestaña **Admin**: verificaciones pendientes (con las 3 fotos) y cuentas bloqueadas.
+
+### Cuando haya una actualización de la base de datos
+Vuelve a pegar TODO `supabase/schema.sql` en **SQL Editor → New query → Run**. Se puede ejecutar las veces que quieras: actualiza las reglas y no borra datos.
+
+### 5. Antes de abrir al público
+- [ ] **Legal (Ley 29733):** el DNI completo es visible en las búsquedas y aún no hay términos de uso, política de privacidad, formulario de eliminación de datos ni reportes de calificaciones. Revísalo con un abogado y registra el banco de datos personales ante la Autoridad Nacional de Protección de Datos Personales.
+- [ ] **Supabase Pro (US$25/mes):** activa copias de seguridad diarias y evita que el proyecto se pause tras 1 semana sin uso. El plan gratis no tiene copias de seguridad.
+- [ ] **Soporte:** pon tu número de WhatsApp en `WHATSAPP_SOPORTE` de `app/config.js` para que las cuentas bloqueadas puedan escribirte.
+
+---
+
+## Cómo funciona por dentro
+
+- **Registro:** DNI (8 dígitos), nombres, apellidos y departamento obligatorios. Los nombres se escriben en MAYÚSCULAS, como en el DNI. Un DNI no puede tener dos cuentas.
+- **Todo usuario entra a la base consultable.** Si otra persona ya había registrado ese DNI, la nueva cuenta lo reclama y **conserva sus calificaciones**.
+- **Verificación:** foto del DNI por ambos lados + selfie con el DNI bajo el mentón. Se comprimen en el celular y se guardan en almacenamiento **privado** (solo el dueño y los administradores las ven). El administrador aprueba o rechaza con motivo. Máximo **3 intentos**; luego la cuenta queda bloqueada hasta que el administrador habilite un intento extra.
+- **Sin verificar** se puede entrar y ver el ranking, pero no buscar, registrar ni calificar.
+- **Búsqueda obligatoria:** solo se registra a una persona si el usuario buscó su DNI en los últimos 30 minutos y no existía; solo se califica a quien apareció en una búsqueda del usuario (últimas 2 horas). Máximo 20 personas registradas por usuario al día.
+- **Calificaciones anónimas:** una por persona, editable. Nadie ve quién calificó; el promedio se recalcula solo. Nadie puede calificarse a sí mismo.
+- **Ranking:** Top 100 por departamento con mínimo 5 calificaciones (no muestra el DNI). Tocar a alguien lo busca para poder calificarlo.
+- **Ninguna pantalla escribe directo en las tablas.** La app solo llama funciones de la base de datos (`buscar_personas`, `registrar_persona`, `calificar`, `enviar_verificacion`, `ranking_departamento`, `admin_revisar_verificacion`, etc.), que validan quién eres y qué te toca. **Cada quien ve solo lo suyo** (seguridad por filas).
+
+## Probar en tu computadora (para desarrolladores)
+Requiere PostgreSQL 16 con un servidor en `/tmp/pg`, puerto 5544:
+- `sh supabase/tests/correr.sh` carga `schema.sql` dos veces y corre los 57 casos de la base de datos. GitHub también los corre solo en cada cambio de `supabase/` (**Actions → Pruebas de la base de datos**).
+- `sh tests/correr_e2e.sh` (requiere Python, `psycopg2` y Playwright) abre la app en un navegador y prueba registro, verificación, rechazo, bloqueo, búsqueda, calificación, ranking, panel de administrador y actualización obligatoria del APK (42 casos).
