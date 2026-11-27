@@ -67,6 +67,10 @@ with sync_playwright() as pw:
     check(pb.get_by_text('Verifica tu identidad', exact=True).is_visible(), 'sin verificar no puede buscar')
     tab(pb, 'Ranking'); check(pb.get_by_text('Las 100 personas más confiables').is_visible(), 'sin verificar sí ve el ranking')
     check(pb.input_value('#rk-dep') == '4', 'el ranking abre en su departamento (Arequipa)')
+    tab(pa, 'Admin'); pa.wait_for_timeout(900)
+    check('permission denied' not in toast(pa), 'el panel de admin carga sin errores de permisos')
+    check(pa.get_by_text('Esperando que envíen sus fotos (1)').is_visible() and pa.get_by_text('ANA LUCÍA RÍOS QUISPE').is_visible(),
+          'admin ve al usuario recién registrado que aún no envía fotos')
     tab(pb, 'Mi cuenta')
     check(pb.get_by_role('button', name='Enviar para verificación').is_disabled(), 'no se puede enviar sin las 3 fotos')
     kyc(pb)
@@ -76,6 +80,7 @@ with sync_playwright() as pw:
     # ---------- 3. Admin rechaza y luego aprueba ----------
     tab(pa, 'Admin'); pa.wait_for_timeout(900)
     check(pa.get_by_text('Verificaciones pendientes (1)').is_visible(), 'admin ve 1 verificación pendiente')
+    check(pa.get_by_text('Esperando que envíen sus fotos (0)').is_visible(), 'al enviar fotos pasa de "esperando" a "pendientes"')
     pa.wait_for_function("[...document.querySelectorAll('img[data-sign]')].every(i => i.complete && i.naturalWidth > 0)")
     check(True, 'admin ve las 3 fotos privadas')
     shot(pa, '03-admin')

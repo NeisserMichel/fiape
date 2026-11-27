@@ -32,7 +32,6 @@ grant usage on schema storage to anon, authenticated;
 grant select, insert on storage.objects to authenticated;
 grant execute on function storage.foldername(text) to anon, authenticated;
 
--- Supabase da por defecto todos los permisos a anon/authenticated en public
+-- Como los proyectos nuevos de Supabase: sin permisos automáticos en las tablas.
+-- schema.sql debe dar explícitamente cada permiso que la app necesita.
 grant usage on schema public to anon, authenticated;
-alter default privileges in schema public grant all on tables to anon, authenticated;
-alter default privileges in schema public grant execute on functions to anon, authenticated;

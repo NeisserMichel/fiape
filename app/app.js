@@ -428,6 +428,14 @@ function vAdmin() {
       <div class="btns"><button class="btn ok" data-act="aprobar" data-id="${v.verificacion_id}">${ic('check')}Aprobar</button>
         <button class="btn bad" data-act="rechazar" data-id="${v.verificacion_id}">Rechazar</button></div>
     </article>`).join('')}</div>` : '<section class="card"><div class="empty">No hay verificaciones pendientes.</div></section>'}
+    <section class="card"><h2>Esperando que envíen sus fotos (${a.espera.length})</h2>
+      <p class="small mute">Se registraron pero aún no envían sus 3 fotos, o fueron rechazados y pueden volver a intentarlo. Aparecerán arriba cuando las envíen.</p>
+      ${a.espera.length ? a.espera.map(u => `<div class="rank" style="cursor:default;grid-template-columns:1fr auto">
+        <span><b style="font:600 15px Inter">${esc(u.nombres)} ${esc(u.apellido_paterno)} ${esc(u.apellido_materno || '')}</b><br>
+        <span class="small mute">DNI ${esc(u.dni || '')} · ${esc(DEPTS[u.departamento_id - 1] || '')} · registrado ${when(u.created_at)}</span></span>
+        <span class="tag ${u.estado === 'rechazado' ? 'bad' : 'warn'}">${u.estado === 'rechazado' ? `Rechazado · ${3 - u.intentos_verificacion} intento${3 - u.intentos_verificacion === 1 ? '' : 's'}` : 'Sin fotos'}</span></div>`).join('')
+        : '<div class="empty">Nadie.</div>'}
+    </section>
     <section class="card"><h2>Cuentas bloqueadas (${a.bloq.length})</h2>
       <p class="small mute">Usaron sus 3 intentos. Si soporte lo aprueba, puedes darles 1 intento más.</p>
       ${a.bloq.length ? a.bloq.map(b => `<div class="rank" style="cursor:default;grid-template-columns:1fr auto">
@@ -437,16 +445,26 @@ function vAdmin() {
     </section>`;
 }
 async function loadAdmin() {
-  try {
-    const [pend, bloq] = await Promise.all([
-      api.rpc('admin_listar_verificaciones', { p_estado: 'en_revision' }),
-      api.select('perfiles', q => q.eq('estado', 'bloqueado'))
-    ]);
-    const ids = (bloq || []).map(b => b.persona_id);
-    const pers = ids.length ? await api.select('personas', q => q.in('id', ids)) : [];
-    (bloq || []).forEach(b => b.dni = pers.find(p => p.id === b.persona_id)?.dni);
-    S.admin = { pend: pend || [], bloq: bloq || [] };
-  } catch (e) { S.admin = { pend: [], bloq: [] }; toast(msg(e)); }
+  // Cada lista se carga por separado: si una falla, las demás se muestran igual.
+  const [pend, perf] = await Promise.allSettled([
+    api.rpc('admin_listar_verificaciones', { p_estado: 'en_revision' }),
+    api.select('perfiles', q => q.in('estado', ['pendiente_envio', 'rechazado', 'bloqueado']))
+  ]);
+  const fallo = [pend, perf].find(r => r.status === 'rejected');
+  if (fallo) toast(msg(fallo.reason));
+  const users = perf.status === 'fulfilled' ? perf.value || [] : [];
+  if (users.length) {
+    try {
+      const pers = await api.select('personas', q => q.in('id', users.map(u => u.persona_id)));
+      users.forEach(u => u.dni = pers.find(p => p.id === u.persona_id)?.dni);
+    } catch (e) { toast(msg(e)); }
+  }
+  users.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  S.admin = {
+    pend: pend.status === 'fulfilled' ? pend.value || [] : [],
+    espera: users.filter(u => u.estado !== 'bloqueado'),
+    bloq: users.filter(u => u.estado === 'bloqueado')
+  };
   if (S.tab === 'admin') render();
 }
 function rejectSheet(id) {

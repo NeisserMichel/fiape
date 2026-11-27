@@ -949,6 +949,12 @@ create policy "calificaciones: ver las propias o admin"
   on public.calificaciones for select to authenticated
   using (autor_id = auth.uid() or public.es_admin());
 
+-- Lectura: los proyectos nuevos de Supabase ya no dan permisos automáticos a las
+-- tablas, así que se dan aquí. Las políticas RLS de arriba deciden qué filas ve cada uno.
+grant usage on schema public to anon, authenticated;
+grant select on public.departamentos to anon, authenticated;
+grant select on public.personas, public.perfiles, public.verificaciones, public.calificaciones to authenticated;
+
 -- Nadie escribe directo en las tablas: solo a través de las funciones
 revoke insert, update, delete, truncate on all tables in schema public from anon, authenticated;
 revoke all on public.busquedas from anon, authenticated;

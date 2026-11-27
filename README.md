@@ -11,7 +11,7 @@ Plataforma de reputación para Perú: los usuarios **verificados con su DNI** ca
 | `supabase/tests/` | Pruebas automáticas de la base de datos (57 comprobaciones) |
 | `android/` | App Android (abre la app web y permite subir las fotos del DNI) |
 | `.github/workflows/` | GitHub corre las pruebas y compila el APK solo |
-| `tests/` | Servidor y prueba de navegador usados en desarrollo (42 comprobaciones; no se usan en producción) |
+| `tests/` | Servidor y prueba de navegador usados en desarrollo (45 comprobaciones; no se usan en producción) |
 
 ---
 
@@ -69,4 +69,4 @@ Vuelve a pegar TODO `supabase/schema.sql` en **SQL Editor → New query → Run*
 ## Probar en tu computadora (para desarrolladores)
 Requiere PostgreSQL 16 con un servidor en `/tmp/pg`, puerto 5544:
 - `sh supabase/tests/correr.sh` carga `schema.sql` dos veces y corre los 57 casos de la base de datos. GitHub también los corre solo en cada cambio de `supabase/` (**Actions → Pruebas de la base de datos**).
-- `sh tests/correr_e2e.sh` (requiere Python, `psycopg2` y Playwright) abre la app en un navegador y prueba registro, verificación, rechazo, bloqueo, búsqueda, calificación, ranking, panel de administrador y actualización obligatoria del APK (42 casos).
+- `sh tests/correr_e2e.sh` (requiere Python, `psycopg2` y Playwright) abre la app en un navegador y prueba registro, verificación, rechazo, bloqueo, búsqueda, calificación, ranking, panel de administrador y actualización obligatoria del APK (45 casos).
