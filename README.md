@@ -9,9 +9,9 @@ Plataforma de reputación para Perú: los usuarios **verificados con su DNI** ca
 | `app/config.js` | **Tus datos de Supabase** (URL y clave pública) — ya configurado |
 | `supabase/schema.sql` | La base de datos completa: tablas, reglas, seguridad y fotos privadas del DNI |
 | `supabase/tests/` | Pruebas automáticas de la base de datos (57 comprobaciones) |
-| `android/` | App Android (abre la app web y permite subir las fotos del DNI) |
+| `android/` | App Android (abre la app web y da permiso de cámara para las fotos del DNI; sin acceso a la galería) |
 | `.github/workflows/` | GitHub corre las pruebas y compila el APK solo |
-| `tests/` | Servidor y prueba de navegador usados en desarrollo (45 comprobaciones; no se usan en producción) |
+| `tests/` | Servidor y prueba de navegador usados en desarrollo (53 comprobaciones; no se usan en producción) |
 
 ---
 
@@ -59,7 +59,7 @@ Vuelve a pegar TODO `supabase/schema.sql` en **SQL Editor → New query → Run*
 
 - **Registro:** DNI (8 dígitos), nombres, apellidos y departamento obligatorios. Los nombres se escriben en MAYÚSCULAS, como en el DNI. Un DNI no puede tener dos cuentas.
 - **Todo usuario entra a la base consultable.** Si otra persona ya había registrado ese DNI, la nueva cuenta lo reclama y **conserva sus calificaciones**.
-- **Verificación:** foto del DNI por ambos lados + selfie con el DNI bajo el mentón. Se comprimen en el celular y se guardan en almacenamiento **privado** (solo el dueño y los administradores las ven). El administrador aprueba o rechaza con motivo. Máximo **3 intentos**; luego la cuenta queda bloqueada hasta que el administrador habilite un intento extra.
+- **Verificación:** foto del DNI por ambos lados + selfie con el DNI bajo el mentón, **tomadas en el momento con la cámara dentro de la app** (con recuadro guía); no se pueden subir fotos guardadas en el teléfono. Se comprimen en el celular y se guardan en almacenamiento **privado** (solo el dueño y los administradores las ven). El administrador aprueba o rechaza con motivo. Máximo **3 intentos**; luego la cuenta queda bloqueada hasta que el administrador habilite un intento extra.
 - **Sin verificar** se puede entrar y ver el ranking, pero no buscar, registrar ni calificar.
 - **Búsqueda obligatoria:** solo se registra a una persona si el usuario buscó su DNI en los últimos 30 minutos y no existía; solo se califica a quien apareció en una búsqueda del usuario (últimas 2 horas). Máximo 20 personas registradas por usuario al día.
 - **Calificaciones anónimas:** una por persona, editable. Nadie ve quién calificó; el promedio se recalcula solo. Nadie puede calificarse a sí mismo.
@@ -69,4 +69,4 @@ Vuelve a pegar TODO `supabase/schema.sql` en **SQL Editor → New query → Run*
 ## Probar en tu computadora (para desarrolladores)
 Requiere PostgreSQL 16 con un servidor en `/tmp/pg`, puerto 5544:
 - `sh supabase/tests/correr.sh` carga `schema.sql` dos veces y corre los 57 casos de la base de datos. GitHub también los corre solo en cada cambio de `supabase/` (**Actions → Pruebas de la base de datos**).
-- `sh tests/correr_e2e.sh` (requiere Python, `psycopg2` y Playwright) abre la app en un navegador y prueba registro, verificación, rechazo, bloqueo, búsqueda, calificación, ranking, panel de administrador y actualización obligatoria del APK (45 casos).
+- `sh tests/correr_e2e.sh` (requiere Python, `psycopg2` y Playwright) abre la app en un navegador y prueba registro, verificación, rechazo, bloqueo, búsqueda, calificación, ranking, panel de administrador y actualización obligatoria del APK (53 casos).

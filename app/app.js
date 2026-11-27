@@ -134,16 +134,6 @@ async function busy(btn, fn) {
   catch (e) { toast(msg(e)); }
   finally { S.busy = false; if (btn && btn.isConnected) { btn.disabled = false; btn.innerHTML = t; } }
 }
-async function compress(file) {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Ese archivo no es una foto válida.')); i.src = url; });
-    const k = Math.min(1, 1600 / Math.max(img.width, img.height));
-    const cv = document.createElement('canvas'); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
-    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-    return await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.82));
-  } finally { URL.revokeObjectURL(url); }
-}
 const pw = (id, ph, auto) => `<div class="pw"><input id="${id}" type="password" autocomplete="${auto}" placeholder="${ph}" required minlength="8">
   <button type="button" class="eye" data-act="eye" data-for="${id}" aria-label="Mostrar contraseña" aria-pressed="false">${ic('eye')}</button></div>`;
 const scoreBar = p => `<div class="bar" aria-hidden="true"><i style="width:${p == null ? 0 : Math.max(2, p * 10)}%"></i></div>`;
@@ -245,7 +235,7 @@ function render() {
   });
 }
 function go(tab) {
-  S.tab = tab; render(); scrollTo(0, 0);
+  closeCam(); S.tab = tab; render(); scrollTo(0, 0);
   if (tab === 'ranking' && !S.rank) loadRanking();
   if (tab === 'admin') loadAdmin();
 }
@@ -374,6 +364,12 @@ const SHOTS = [
   ['rev', 'DNI por detrás', 'La parte de atrás completa, sin reflejos.', 'card'],
   ['sel', 'Tú con tu DNI', 'Una selfie sosteniendo tu DNI en la mano, debajo del mentón, con tu cara descubierta.', 'camera']
 ];
+// Guía de cada foto en la cámara: [cámara, forma del recuadro, texto]
+const CAM = {
+  anv: ['environment', 'g-card', 'Pon el DNI por delante dentro del recuadro'],
+  rev: ['environment', 'g-card', 'Pon el DNI por detrás dentro del recuadro'],
+  sel: ['user', 'g-face', 'Tu cara y tu DNI debajo del mentón']
+};
 function vKyc() {
   const m = S.me;
   if (m.estado === 'verificado') return `<div class="note ok"><b>Tu identidad está verificada.</b> Ya puedes buscar, registrar y calificar.</div>`;
@@ -384,10 +380,11 @@ function vKyc() {
   return `${m.estado === 'rechazado' ? `<div class="note bad"><b>No pudimos verificar tu identidad.</b>${m.ultimo_motivo_rechazo ? `<br>Motivo: ${esc(m.ultimo_motivo_rechazo)}` : ''}<br>Te ${m.intentos_restantes === 1 ? 'queda 1 intento' : `quedan ${m.intentos_restantes} intentos`}.</div>`
     : `<div class="note warn">Sube 3 fotos para verificar que eres tú. Tienes ${m.intentos_restantes} intentos.</div>`}
     <p class="small mute">Tus datos deben coincidir <b>exactamente</b> con tu DNI: ${esc(m.nombres)} ${esc(m.apellido_paterno)} ${esc(m.apellido_materno || '')} · DNI ${esc(m.dni)}. Las fotos son privadas: solo las ve el equipo de verificación.</p>
+    <p class="small mute">Por seguridad, las fotos se toman <b>en el momento con la cámara</b>: no se pueden subir fotos guardadas en el teléfono.</p>
     ${SHOTS.map(([k, t, d, i]) => { const f = S.kyc[k]; return `
       <div class="shot ${f ? 'done' : ''}"><div class="th">${f ? `<img src="${f.url}" alt="">` : ic(i)}</div>
         <div><b>${t}</b><div class="small mute">${d}</div>
-        <label class="pickb">${f ? 'Cambiar foto' : 'Elegir o tomar foto'}<input type="file" accept="image/*" data-kyc="${k}"></label></div></div>`; }).join('')}
+        <button class="pickb" data-act="cam" data-k="${k}">${ic('camera')}${f ? 'Tomar otra' : 'Tomar foto'}</button></div></div>`; }).join('')}
     <button class="btn" data-act="kyc" ${SHOTS.every(([k]) => S.kyc[k]) ? '' : 'disabled'}>Enviar para verificación</button>`;
 }
 function vCuenta() {
@@ -400,11 +397,72 @@ function vCuenta() {
   </dl></section>
   <button class="btn ghost" data-act="logout">Cerrar sesión</button>`;
 }
+/* Cámara en vivo: las fotos se toman en el momento, nunca desde la galería. */
+let camStream = null;
+function stopCam() { camStream?.getTracks().forEach(t => t.stop()); camStream = null; }
+function closeCam() { stopCam(); $('.cam')?.remove(); }
+function camError(e) {
+  const n = e?.name || '';
+  if (n === 'NotAllowedError' || n === 'SecurityError') return 'Fiapé necesita permiso para usar la cámara. Actívalo en los ajustes del navegador o de la app y vuelve a intentarlo.';
+  if (n === 'NotFoundError' || n === 'OverconstrainedError' || n === 'NoCamera') return 'No encontramos una cámara en este dispositivo. Abre Fiapé desde tu celular.';
+  if (n === 'NotReadableError') return 'La cámara está ocupada por otra app. Ciérrala y vuelve a intentarlo.';
+  return 'No se pudo abrir la cámara. Vuelve a intentarlo.';
+}
+async function openCam(k) {
+  const [facing0, shape, hint] = CAM[k];
+  let facing = facing0;
+  const title = SHOTS.find(x => x[0] === k)[1];
+  const el = document.createElement('div'); el.className = 'cam'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
+  el.innerHTML = `<div class="camtop"><b>${title}</b><span>${hint}</span></div>
+    <div class="camview"><video playsinline muted autoplay></video><div class="guide ${shape}" aria-hidden="true"></div><img class="camprev" alt="Foto tomada" hidden></div>
+    <div class="cambar" data-mode="live">
+      <button type="button" data-c="cancel">Cancelar</button>
+      <button type="button" data-c="snap" class="snap" aria-label="Tomar foto"></button>
+      <button type="button" data-c="flip">Girar</button>
+    </div>
+    <div class="cambar" data-mode="review" hidden>
+      <button type="button" data-c="retry">Repetir</button>
+      <button type="button" data-c="use" class="use">Usar esta foto</button>
+    </div>`;
+  document.body.appendChild(el);
+  const video = $('video', el), prev = $('.camprev', el);
+  let blob = null;
+  const start = async () => {
+    stopCam();
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) throw { name: 'NoCamera' };
+      camStream = await navigator.mediaDevices.getUserMedia({ audio: false,
+        video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+      video.srcObject = camStream; video.classList.toggle('mirror', facing === 'user');
+      await video.play().catch(() => {});
+    } catch (e) { closeCam(); toast(camError(e)); }
+  };
+  const mode = m => $$('.cambar', el).forEach(b => b.hidden = b.dataset.mode !== m);
+  el.addEventListener('click', async e => {
+    const c = e.target.closest('[data-c]')?.dataset.c; if (!c) return;
+    if (c === 'cancel') closeCam();
+    else if (c === 'flip') { facing = facing === 'user' ? 'environment' : 'user'; await start(); }
+    else if (c === 'snap') {
+      if (!video.videoWidth) return toast('La cámara aún se está abriendo…');
+      const k2 = Math.min(1, 1600 / Math.max(video.videoWidth, video.videoHeight));
+      const cv = document.createElement('canvas'); cv.width = Math.round(video.videoWidth * k2); cv.height = Math.round(video.videoHeight * k2);
+      cv.getContext('2d').drawImage(video, 0, 0, cv.width, cv.height);   // se guarda sin espejo: el DNI se lee bien
+      blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.85));
+      prev.src = URL.createObjectURL(blob); prev.hidden = false; video.hidden = true; $('.guide', el).hidden = true; mode('review');
+    }
+    else if (c === 'retry') { URL.revokeObjectURL(prev.src); prev.hidden = true; video.hidden = false; $('.guide', el).hidden = false; blob = null; mode('live'); }
+    else if (c === 'use' && blob) {
+      if (S.kyc[k]) URL.revokeObjectURL(S.kyc[k].url);
+      S.kyc[k] = { blob, url: prev.src }; closeCam(); render();
+    }
+  });
+  await start();
+}
 async function sendKyc(btn) {
   await busy(btn, async () => {
     const t = Date.now(), uid = S.user.id, paths = [];
     for (const [k, name] of [['anv', 'anverso'], ['rev', 'reverso'], ['sel', 'selfie']])
-      paths.push(await api.upload('verificaciones', `${uid}/${t}-${name}.jpg`, await compress(S.kyc[k].file)));
+      paths.push(await api.upload('verificaciones', `${uid}/${t}-${name}.jpg`, S.kyc[k].blob));
     await api.rpc('enviar_verificacion', { p_foto_dni_anverso: paths[0], p_foto_dni_reverso: paths[1], p_foto_selfie_dni: paths[2] });
     S.kyc = {}; await loadMe(); render(); toast('¡Fotos enviadas! Te avisaremos cuando revisemos tu identidad.');
   });
@@ -501,6 +559,7 @@ document.addEventListener('click', async e => {
     S.tab = 'buscar'; render(); await doSearch(null, b.dataset.n);
   }
   else if (a === 'kyc') sendKyc(b);
+  else if (a === 'cam') openCam(b.dataset.k);
   else if (a === 'reload') busy(b, async () => { await loadMe(); render(); if (verified()) toast('¡Tu identidad fue verificada!'); });
   else if (a === 'logout') { await api.signOut(); Object.assign(S, { user: null, me: null, res: null, q: '', rank: null, admin: null, kyc: {}, tab: 'buscar' }); viewAuth(); }
   else if (a === 'admreload') { S.admin = null; render(); loadAdmin(); }
@@ -536,12 +595,6 @@ document.addEventListener('input', e => {
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.id === 'rk-dep') { S.rankDep = +t.value; S.rank = null; render(); loadRanking(); }
-  if (t.dataset.kyc) {
-    const f = t.files?.[0]; if (!f) return;
-    if (!f.type.startsWith('image/')) return toast('Elige una foto (JPG o PNG).');
-    if (S.kyc[t.dataset.kyc]) URL.revokeObjectURL(S.kyc[t.dataset.kyc].url);
-    S.kyc[t.dataset.kyc] = { file: f, url: URL.createObjectURL(f) }; render();
-  }
 });
 document.addEventListener('visibilitychange', async () => {
   if (document.visibilityState === 'visible' && S.me?.estado === 'en_revision') {

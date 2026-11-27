@@ -34,14 +34,23 @@ def register(p, dni, nom, ap, am, dep, email):
     p.locator('[data-act=eye][data-for=r-pass]').click()
     p.locator('[data-act=register]').click(); p.wait_for_timeout(900)
 
+def foto(p, k, repetir=False):
+    p.locator(f'[data-act=cam][data-k={k}]').click()
+    p.wait_for_function("(() => { const v = document.querySelector('.cam video'); return v && v.videoWidth > 0; })()")
+    p.locator('.cam [data-c=snap]').click(); p.wait_for_timeout(300)
+    if repetir:
+        p.locator('.cam [data-c=retry]').click(); p.wait_for_timeout(300)
+        p.locator('.cam [data-c=snap]').click(); p.wait_for_timeout(300)
+    p.locator('.cam [data-c=use]').click(); p.wait_for_timeout(300)
+
 def kyc(p):
-    for k, f in [('anv', 'anverso'), ('rev', 'reverso'), ('sel', 'selfie')]:
-        p.set_input_files(f'input[data-kyc={k}]', f'{OUT}/{f}.jpg'); p.wait_for_timeout(250)
+    for k in ('anv', 'rev', 'sel'): foto(p, k)
     click(p, 'Enviar para verificación'); p.wait_for_timeout(900)
 
 with sync_playwright() as pw:
-    br = pw.chromium.launch(channel='chrome', args=['--no-sandbox'])
-    mobile = dict(viewport={'width': 390, 'height': 844}, device_scale_factor=2)
+    # Cámara simulada de Chrome: imita la cámara del celular para las fotos de verificación
+    br = pw.chromium.launch(channel='chrome', args=['--no-sandbox', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'])
+    mobile = dict(viewport={'width': 390, 'height': 844}, device_scale_factor=2, permissions=['camera'])
 
     # ---------- 1. Registro del administrador ----------
     A = br.new_context(**mobile); pa = page(A, 'admin')
@@ -73,9 +82,31 @@ with sync_playwright() as pw:
           'admin ve al usuario recién registrado que aún no envía fotos')
     tab(pb, 'Mi cuenta')
     check(pb.get_by_role('button', name='Enviar para verificación').is_disabled(), 'no se puede enviar sin las 3 fotos')
-    kyc(pb)
+    check(pb.locator('input[type=file]').count() == 0, 'no existe opción para elegir fotos guardadas del teléfono')
+    check(pb.locator('[data-act=cam]').count() == 3, 'hay un botón "Tomar foto" con cámara para cada una de las 3 fotos')
+    pb.locator('[data-act=cam][data-k=anv]').click()
+    pb.wait_for_function("(() => { const v = document.querySelector('.cam video'); return v && v.videoWidth > 0; })()")
+    check(pb.locator('.cam .guide.g-card').is_visible(), 'la cámara muestra el recuadro guía del DNI')
+    check(pb.evaluate("getComputedStyle(document.querySelector('.cam .guide')).backgroundColor") in ('rgba(0, 0, 0, 0)', 'transparent'),
+          'el recuadro guía es transparente: se ve la cámara a través de él')
+    shot(pb, '02b-camara')
+    pb.locator('.cam [data-c=cancel]').click(); pb.wait_for_timeout(300)
+    check(pb.locator('.cam').count() == 0, 'cancelar cierra la cámara')
+    foto(pb, 'anv', repetir=True)
+    check(pb.locator('.shot.done').count() == 1, 'la foto tomada (tras "Repetir") queda lista')
+    pb.locator('[data-act=cam][data-k=sel]').click()
+    pb.wait_for_function("(() => { const v = document.querySelector('.cam video'); return v && v.videoWidth > 0; })()")
+    check(pb.locator('.cam .guide.g-face').is_visible() and 'mirror' in (pb.locator('.cam video').get_attribute('class') or ''),
+          'la selfie usa la cámara frontal con guía de cara')
+    pb.locator('.cam [data-c=cancel]').click(); pb.wait_for_timeout(300)
+    for k in ('rev', 'sel'): foto(pb, k)
+    click(pb, 'Enviar para verificación'); pb.wait_for_timeout(900)
     check(pb.get_by_text('Estamos revisando tus fotos').is_visible(), 'tras enviar queda en revisión')
     check(sqlx("select count(*) from storage.objects where bucket_id='verificaciones'")[0][0] == 3, 'las 3 fotos se guardan en el bucket privado')
+    from PIL import Image as _I
+    _f = sqlx("select name from storage.objects where bucket_id='verificaciones' order by name limit 1")[0][0]
+    _im = _I.open(f'/tmp/fiape-files/verificaciones/{_f}')
+    check(_im.format == 'JPEG' and _im.width >= 320, f'la foto de cámara se guarda como JPG ({_im.width}x{_im.height})')
 
     # ---------- 3. Admin rechaza y luego aprueba ----------
     tab(pa, 'Admin'); pa.wait_for_timeout(900)
